@@ -1,12 +1,7 @@
-streamlit
+gradio
 torch
 transformers
 diffusers
-accelerate
-sounddevice
-soundfile
 librosa
-scipy
 numpy
-pillow
-huggingface_hub
+accelerate
