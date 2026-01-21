@@ -1,8 +1,6 @@
 import streamlit as st
-import sounddevice as sd
 import torch
 import numpy as np
-from scipy.io.wavfile import write
 from transformers import WhisperProcessor, WhisperForConditionalGeneration, pipeline
 from diffusers import StableDiffusionPipeline
 import librosa
@@ -99,25 +97,32 @@ language_mode = st.sidebar.selectbox(
 # ------------------------
 # Record Audio
 # ------------------------
-if st.button("🎤 Record Audio"):
-    fs = 16000
-    st.info("Recording...")
-    audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='float32')
-    sd.wait()
-    st.success("Recording finished!")
+st.markdown("### 📤 Upload your audio file")
+uploaded_file = st.file_uploader("Upload a WAV / MP3 / M4A file", type=["wav", "mp3", "m4a"])
 
-    audio_path = "audio_input.wav"
-    write(audio_path, fs, (audio * 32767).astype(np.int16))
+if uploaded_file is not None:
+    st.success("Audio uploaded successfully!")
 
-    # ------------------------
+    with open("audio_input.wav", "wb") as f:
+        f.write(uploaded_file.read())
+
     # Transcription
-    # ------------------------
-    st.info("Transcribing...")
-    audio_input, _ = librosa.load(audio_path, sr=16000)
+    st.info("Transcribing audio...")
+
+    audio_input, _ = librosa.load("audio_input.wav", sr=16000)
 
     input_features = processor(
         audio_input, sampling_rate=16000, return_tensors="pt"
     ).input_features.to(DEVICE)
+
+    with torch.no_grad():
+        predicted_ids = whisper_model.generate(input_features)
+
+    transcription = processor.decode(predicted_ids[0], skip_special_tokens=True)
+
+    st.session_state.text_prompt = transcription
+    st.session_state.audio_done = True
+
 
     # Decide language
     generate_kwargs = {}

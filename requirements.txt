@@ -1,7 +1,9 @@
-gradio
+streamlit
 torch
 transformers
 diffusers
-librosa
-numpy
 accelerate
+librosa
+scipy
+numpy
+pillow
