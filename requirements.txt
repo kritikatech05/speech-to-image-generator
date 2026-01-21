@@ -1,0 +1,12 @@
+streamlit
+torch
+transformers
+diffusers
+accelerate
+sounddevice
+soundfile
+librosa
+scipy
+numpy
+pillow
+huggingface_hub
