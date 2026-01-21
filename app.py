@@ -7,12 +7,17 @@ import librosa
 import tempfile
 
 # ------------------------
+# Page config FIRST
+# ------------------------
+st.set_page_config(page_title="Speech to Image Generator", layout="wide")
+
+# ------------------------
 # Device
 # ------------------------
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # ------------------------
-# CACHED MODEL LOADERS
+# CACHED MODEL LOADERS (DO NOT CALL AT STARTUP)
 # ------------------------
 @st.cache_resource
 def load_whisper():
@@ -23,7 +28,7 @@ def load_whisper():
 @st.cache_resource
 def load_sd():
     pipe = StableDiffusionPipeline.from_pretrained(
-        "runwayml/stable-diffusion-v1-5",
+        "stabilityai/sdxl-turbo",   # 🔥 MUCH FASTER MODEL
         torch_dtype=torch.float16 if DEVICE == "cuda" else torch.float32
     )
     pipe = pipe.to(DEVICE)
@@ -33,18 +38,16 @@ def load_sd():
 def load_sentiment():
     return pipeline("sentiment-analysis")
 
-# ------------------------
-# Load models
-# ------------------------
-processor, whisper_model = load_whisper()
-sd_pipe = load_sd()
-sentiment_pipeline = load_sentiment()
+@st.cache_resource
+def get_models():
+    processor, whisper_model = load_whisper()
+    sd_pipe = load_sd()
+    sentiment_pipeline = load_sentiment()
+    return processor, whisper_model, sd_pipe, sentiment_pipeline
 
 # ------------------------
 # UI
 # ------------------------
-st.set_page_config(page_title="Speech to Image Generator", layout="wide")
-
 st.markdown(
     """
     <h1 style='text-align: center;'>🎙️ Speech to Image Generator</h1>
@@ -56,7 +59,7 @@ st.markdown(
 )
 
 if DEVICE == "cpu":
-    st.warning("⚠️ Running on CPU — generation may be slow.")
+    st.warning("⚠️ Running on CPU — first generation may take 2–5 minutes.")
 else:
     st.success("🚀 Running on GPU")
 
@@ -66,11 +69,11 @@ st.sidebar.header("⚙️ Settings")
 quality = st.sidebar.selectbox("Image Quality", ["Fast", "Balanced", "High Quality"])
 
 if quality == "Fast":
-    steps = 10
+    steps = 4
 elif quality == "Balanced":
-    steps = 20
+    steps = 6
 else:
-    steps = 35
+    steps = 8
 
 # Upload audio
 uploaded_audio = st.file_uploader("🎤 Upload an audio file", type=["wav", "mp3", "m4a"])
@@ -82,32 +85,49 @@ if uploaded_audio is not None:
         tmp.write(uploaded_audio.read())
         audio_path = tmp.name
 
-    st.info("Transcribing audio...")
+    if st.button("🧠 Transcribe & Generate"):
 
-    audio_input, _ = librosa.load(audio_path, sr=16000)
+        # ------------------------
+        # Load models LAZILY
+        # ------------------------
+        with st.spinner("🔄 Loading AI models (first time may take 2–5 minutes)..."):
+            processor, whisper_model, sd_pipe, sentiment_pipeline = get_models()
 
-    input_features = processor(
-        audio_input, sampling_rate=16000, return_tensors="pt"
-    ).input_features.to(DEVICE)
+        # ------------------------
+        # Transcription
+        # ------------------------
+        st.info("🎧 Transcribing audio...")
 
-    with torch.no_grad():
-        predicted_ids = whisper_model.generate(input_features)
+        audio_input, _ = librosa.load(audio_path, sr=16000)
 
-    transcription = processor.decode(predicted_ids[0], skip_special_tokens=True)
-
-    st.text_area("📝 Transcription:", transcription)
-
-    sentiment = sentiment_pipeline(transcription)[0]
-    st.write(f"**Sentiment:** {sentiment['label']} ({sentiment['score']:.2f})")
-
-    estimated_time = steps * 3
-    st.info(f"⏳ Estimated generation time: ~{estimated_time} seconds")
-
-    if st.button("🎨 Generate Image"):
-        st.info("Generating image...")
+        input_features = processor(
+            audio_input, sampling_rate=16000, return_tensors="pt"
+        ).input_features.to(DEVICE)
 
         with torch.no_grad():
-            image = sd_pipe(transcription, num_inference_steps=steps).images[0]
+            predicted_ids = whisper_model.generate(input_features)
+
+        transcription = processor.decode(predicted_ids[0], skip_special_tokens=True)
+
+        st.text_area("📝 Transcription:", transcription)
+
+        # ------------------------
+        # Sentiment
+        # ------------------------
+        sentiment = sentiment_pipeline(transcription)[0]
+        st.write(f"**Sentiment:** {sentiment['label']} ({sentiment['score']:.2f})")
+
+        # ------------------------
+        # Image generation
+        # ------------------------
+        st.info("🎨 Generating image... (please wait)")
+
+        with torch.no_grad():
+            image = sd_pipe(
+                prompt=transcription,
+                num_inference_steps=steps,
+                guidance_scale=0.0  # required for turbo
+            ).images[0]
 
         col1, col2 = st.columns([1, 1])
 
@@ -115,7 +135,8 @@ if uploaded_audio is not None:
             st.image(image, caption="Generated Image", width=512)
 
         with col2:
-            st.write("### Prompt used")
+            st.write("### 🧾 Prompt used")
             st.write(transcription)
-            st.write("### Settings")
+            st.write("### ⚙️ Settings")
             st.write(f"Steps: {steps}")
+            st.write(f"Quality: {quality}")
