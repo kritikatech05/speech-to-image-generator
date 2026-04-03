@@ -19,8 +19,9 @@ An AI-powered application that converts speech into images using deep learning m
 ## 📸 Example
 Input: "A dog standing in a park"
 
-Output: Realistic generated image
+## 📸 Demo Output
 
+![Demo](demo.jpeg)
 ## ⚠️ Note
 Deployment may face issues due to Python 3.13 compatibility with certain ML libraries (tokenizers, PyO3).
 
