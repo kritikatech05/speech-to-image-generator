@@ -1,0 +1,7 @@
+streamlit
+torch
+transformers
+diffusers
+huggingface_hub
+accelerate
+librosa
