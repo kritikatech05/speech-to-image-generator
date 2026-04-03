@@ -1,9 +1,0 @@
-streamlit
-torch
-transformers
-diffusers
-accelerate
-librosa
-scipy
-numpy
-pillow
